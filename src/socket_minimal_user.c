@@ -33,8 +33,9 @@ int main() {
     bpf_object__load(obj);
 
     rb_fd = bpf_object__find_map_fd_by_name(obj, "events_rb");
+    
+    struct ring_buffer *rb = ring_buffer__new(rb_fd, handle_event, NULL, NULL);
 
-    struct ring_buffer *rb = ring_buffer__new(rb_fd, handle_event, NULL);
     while (1) ring_buffer__poll(rb, 100);
 
     return 0;

@@ -1,6 +1,6 @@
-// socket_minimal_user.c
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 #include <bpf/libbpf.h>
 
 struct conn_event {
@@ -28,15 +28,39 @@ static int handle_event(void *ctx, void *data, size_t len) {
 int main() {
     struct bpf_object *obj;
     int rb_fd;
+    struct ring_buffer *rb;
 
-    obj = bpf_object__open_file("socket_minimal.bpf.o", NULL);
-    bpf_object__load(obj);
+    /* Correct path: your .o file lives in bpf/ */
+    obj = bpf_object__open_file("bpf/socket_minimal.bpf.o", NULL);
+    if (!obj) {
+        fprintf(stderr, "Failed to open BPF object file\n");
+        return 1;
+    }
+
+    if (bpf_object__load(obj)) {
+        fprintf(stderr, "Failed to load BPF object\n");
+        return 1;
+    }
 
     rb_fd = bpf_object__find_map_fd_by_name(obj, "events_rb");
-    
-    struct ring_buffer *rb = ring_buffer__new(rb_fd, handle_event, NULL, NULL);
+    if (rb_fd < 0) {
+        fprintf(stderr, "Failed to find events_rb map\n");
+        return 1;
+    }
 
-    while (1) ring_buffer__poll(rb, 100);
+    rb = ring_buffer__new(rb_fd, handle_event, NULL, NULL);
+    if (!rb) {
+        fprintf(stderr, "Failed to create ring buffer\n");
+        return 1;
+    }
+
+    while (1) {
+        int err = ring_buffer__poll(rb, 100);
+        if (err < 0) {
+            fprintf(stderr, "ring_buffer__poll error: %d\n", err);
+            break;
+        }
+    }
 
     return 0;
 }
